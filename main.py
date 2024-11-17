@@ -78,16 +78,53 @@ class Service2Captcha:
         )
         return result['code']
 
+class ServiceCustomCaptcha:
+    def __init__(self, api_url):
+        """
+        Initializes the custom CAPTCHA service with a fixed base URL.
+        """
+        self.base_url = api_url
+
+    async def get_captcha_token_async(self):
+        """
+        Fetches a CAPTCHA token from the custom CAPTCHA service.
+        """
+        url = f"{self.base_url}turnstile"
+        params = {
+            "url": CaptchaConfig.WEBSITE_URL,
+            "sitekey": CaptchaConfig.WEBSITE_KEY,
+        }
+        try:
+            response = await asyncio.to_thread(
+                lambda: requests.get(url, params=params, timeout=30)
+            )
+            if response.status_code == 200:
+                data = response.json()
+                if data.get("status") == "success" and "result" in data:
+                    return data["result"]  # Extract the CAPTCHA token
+                elif data.get("error"):
+                    raise Exception(f"Custom CAPTCHA service error: {data['error']}")
+                else:
+                    raise Exception("Unknown error in CAPTCHA response")
+            else:
+                raise Exception(f"HTTP error: {response.status_code}, {response.text}")
+        except Exception as e:
+            raise Exception(f"Custom CAPTCHA service error: {str(e)}")
+
+
 class CaptchaServiceFactory:
     @staticmethod
-    def create_service(service_name: str, api_key: str):
+    def create_service(service_name: str, api_key_or_url: str = None):
         if service_name.lower() == "capmonster":
-            return ServiceCapmonster(api_key)
+            return ServiceCapmonster(api_key_or_url)
         elif service_name.lower() == "anticaptcha":
-            return ServiceAnticaptcha(api_key)
+            return ServiceAnticaptcha(api_key_or_url)
         elif service_name.lower() == "2captcha":
-            return Service2Captcha(api_key)
+            return Service2Captcha(api_key_or_url)
+        elif service_name.lower() == "custom":
+            return ServiceCustomCaptcha(api_key_or_url)
         raise ValueError(f"Unknown service: {service_name}")
+
 
 class ProxyManager:
     def __init__(self, proxy_list: list):
@@ -398,9 +435,13 @@ async def main():
     print(f"\n{Fore.YELLOW}Available captcha services:{Style.RESET_ALL}")
     print(f"1. Capmonster")
     print(f"2. Anticaptcha")
-    print(f"3. 2Captcha{Style.RESET_ALL}")
-    service_choice = input(f"{Fore.GREEN}Choose captcha service (1-3): {Style.RESET_ALL}")
-    api_key = input(f"{Fore.GREEN}Enter API key for captcha service: {Style.RESET_ALL}")
+    print(f"3. 2Captcha")
+    print(f"4. Free Custom Solver (this is custom service){Style.RESET_ALL}")
+    service_choice = input(f"{Fore.GREEN}Choose captcha service (1-4): {Style.RESET_ALL}")
+    if service_choice == "4":
+        api_key_or_url = input(f"{Fore.GREEN}Enter URL Endpoint for captcha service: {Style.RESET_ALL}")  # No API key required for the custom service
+    else:
+        api_key_or_url = input(f"{Fore.GREEN}Enter API key for captcha service: {Style.RESET_ALL}")
 
     use_proxies = input(f"{Fore.GREEN}Use proxies? (yes/no): {Style.RESET_ALL}").lower() == 'yes'
     proxy_manager = None
@@ -417,11 +458,12 @@ async def main():
     service_map = {
         "1": "capmonster",
         "2": "anticaptcha",
-        "3": "2captcha"
+        "3": "2captcha",
+        "4": "custom"
     }
     
     try:
-        captcha_service = CaptchaServiceFactory.create_service(service_map[service_choice], api_key)
+        captcha_service = CaptchaServiceFactory.create_service(service_map[service_choice], api_key_or_url)
         log_step("Captcha service initialized", "success")
     except Exception as e:
         log_step(f"Failed to initialize captcha service: {str(e)}", "error")
@@ -447,6 +489,8 @@ async def main():
             print(f"{Fore.CYAN}IP Used: {Fore.WHITE}{result['ip_used']}")
             successful_referrals.append(result)
             
+            with open('token.txt', 'a') as f:
+                f.write(f"{result['token']}\n")
             with open('accounts.txt', 'a') as f:
                 f.write(f"Email: {result['email']}\n")
                 f.write(f"Password: {result['password']}\n")

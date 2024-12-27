@@ -445,7 +445,7 @@ class ReferralClient:
         for attempt in range(1, self.max_retries + 1):
             try:
                 log_step(
-                    f"\nStarting referral process (attempt {attempt}/{self.max_retries})...",
+                    f"Starting referral process for ref: {ref_code} (attempt {attempt}/{self.max_retries})...",
                     "info",
                 )
                 self._start_new_proxy_session()
@@ -573,7 +573,7 @@ async def main():
 
     for i in range(num_referrals):
         print(f"\n{Fore.CYAN}{'='*45}")
-        log_step(f"Processing referral {i+1}/{num_referrals}", "info")
+        log_step(f"Processing referral {i+1}/{num_referrals} for ref: {ref_code}", "info")
 
         result = await client.process_referral(ref_code, captcha_service)
         if result:
